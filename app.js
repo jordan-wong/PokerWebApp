@@ -59,15 +59,44 @@ for (i = 0; i < numSeats; i++){
   //console.log(playerSeats[i]);
 }
 
+/*
 function updateLobbyState(){ //updates lobby info for users
   for(var i in SOCKET_LIST){
     var user = SOCKET_LIST[i];
     //data.reason = button id that was clicked on
     user.emit('LobbyState', playerSeats);
+    
     }
+  //console.log('Socket list is', SOCKET_LIST);
+  //console.log('Socket list is', io.sockets.sockets);
+}*/
+
+function updateLobbyState(){ //updates lobby info for users
+  var sockets = io.of("/").connected;
+  for(var socketId in sockets){
+    var user = sockets[socketId];
+    //data.reason = button id that was clicked on
+    user.emit('LobbyState', playerSeats);
+    
+    console.log('user', socketId);
+  }
+  //console.log('Socket list is', SOCKET_LIST);
+  //console.log('Socket list is', io.sockets.sockets);
 }
 
+/* IMPORTANT NOTE
+io.sockets.sockets is an object where a key a socketId and value is 
+a reference to a socket object*/
 
+function dealCards(){
+  var sockets = io.of("/").connected;
+  
+  for(var socketId in sockets){
+    var user = sockets[socketId];
+    user.emit('addStartingCards', mainDeck.drawTop());
+    //user.emit('addStartingCards', mainDeck.drawTop());
+  }
+}
 
 
 /*#######
@@ -132,16 +161,65 @@ io.sockets.on('connection', function(socket){
 
   //Listening for the server to start the game
   socket.on('startGame', function(data){
+    //at start of new game, re-initialize deck and shuffle
+    mainDeck = new Deck();
+    mainDeck.shuffle();
+    
+    chipPot = 0;
+
+
     //Add 2 cards from the top of the deck to each user in the player seats
     console.log(mainDeck.deckSize());
-    for(var a in playerSeats){
-        SOCKET_LIST[playerSeats[a]].emit('addStartingCards', mainDeck.drawTop());
-        SOCKET_LIST[playerSeats[a]].emit('addStartingCards', mainDeck.drawTop());
+    for(var p in playerSeats){
+        var newPlayer = new Player(p);
+        holeCard1 = mainDeck.drawTop();
+        holeCard2 = mainDeck.drawTop();
+        newPlayer.setHand([holeCard1, holeCard2]);
+
+        SOCKET_LIST[playerSeats[p]].emit('addStartingCards', holeCard1);
+        SOCKET_LIST[playerSeats[p]].emit('addStartingCards', holeCard2);
+
+        playerList.push(newPlayer);   
+    }
+
+    /*MAIN GAME*/
+    var button = 0; //button = dealer ,blinds start left of dealer
+
+    //chip amounts for small/ big blind
+    var smallBlind = 1;
+    var bigBlind = 2;
+
+    //track highest bet in round to know who still needs to call
+    var highestBet = 0;
+
+    //circular array traversal for playerList
+    playerList[((button + 1) % playerList.length)].betChips(smallBlind);
+    playerList[((button + 2) % playerList.length)].betChips(bigBlind);
+    chipPot = smallBlind + bigBlind;
+    highestBet = bigBlind;
+
+    for(var p = button + 3; playerList[(p % playerList.length)].currentBet() < highestBet; p++){
+      var currPlayer = playerList[(p % playerList.length)];
+      playerList[(p % playerList.length)].setTurnToPlay(true);
+      while(playerList[(p % playerList.length)].isTurnToPlay() === true){
+        socket.on('call', function(data){
+          var callAmount = highestBet - currPlayer.currentBet(); //calculate amount player needs to call
+          currPlayer.betChips(callAmount);
+          playerList[(p % playerList.length)].setTurnToPlay(false);//the players turn has ended
+        });
+        socket.on('raise', function(data){
+          
+          playerList[(p % playerList.length)].setTurnToPlay(false);//the players turn has ended
+        });
+        socket.on('fold', function(data){
+          
+          playerList[(p % playerList.length)].setTurnToPlay(false);//the players turn has ended
+        });
+      
+      }
     }
 
   });
-
-
 
 });
 /*

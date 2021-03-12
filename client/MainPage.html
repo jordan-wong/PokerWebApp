@@ -69,6 +69,7 @@
       //Listen for the message 'addStartingCards' to distribute shuffled cards to the client
       socket.on('addStartingCards', function(data){
         //Item format in myCards: { value: 'Ace', suit: 'Clubs' }
+        console.log(data)
         myCards.push(data);
 
         //Display 2 cards to the users
